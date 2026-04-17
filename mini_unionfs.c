@@ -9,7 +9,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <stdlib.h>
-#include <limits.h>   /* FIX 3: PATH_MAX */
+#include <limits.h>   
 
 struct unionfs_state {
     char *lower_dir;
@@ -43,7 +43,7 @@ int copy_file(const char *src, const char *dest)
 // ---------------- RESOLVE PATH ----------------
 int resolve_path(const char *path, char *resolved)
 {
-    char upper[PATH_MAX], lower[PATH_MAX], whiteout[PATH_MAX];  /* FIX 3 */
+    char upper[PATH_MAX], lower[PATH_MAX], whiteout[PATH_MAX];  
 
     snprintf(upper, sizeof(upper), "%s%s", UNIONFS_DATA->upper_dir, path);
     snprintf(lower, sizeof(lower), "%s%s", UNIONFS_DATA->lower_dir, path);
@@ -73,7 +73,7 @@ static int unionfs_getattr(const char *path, struct stat *stbuf,
                            struct fuse_file_info *fi)
 {
     (void) fi;
-    char resolved[PATH_MAX];  /* FIX 3 */
+    char resolved[PATH_MAX];  
 
     if (resolve_path(path, resolved) != 0)
         return -ENOENT;
@@ -94,9 +94,8 @@ static int unionfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     DIR *dp;
     struct dirent *de;
 
-    char upper[PATH_MAX], lower[PATH_MAX];  /* FIX 3 */
+    char upper[PATH_MAX], lower[PATH_MAX];  
 
-    /* FIX 2: dynamic seen list instead of fixed seen[100][256] */
     int capacity = 128;
     int count = 0;
     char **seen = malloc(capacity * sizeof(char *));
@@ -111,7 +110,6 @@ static int unionfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
             if (strncmp(de->d_name, ".wh.", 4) == 0) continue;
             filler(buf, de->d_name, NULL, 0, 0);
 
-            /* grow if needed */
             if (count == capacity) {
                 capacity *= 2;
                 char **tmp = realloc(seen, capacity * sizeof(char *));
@@ -131,8 +129,6 @@ static int unionfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
             for (int i = 0; i < count; i++)
                 if (strcmp(seen[i], de->d_name) == 0) { found = 1; break; }
 
-            /* FIX 1 (readdir whiteout): build whiteout path relative to
-               the directory being listed, not always upper_dir root */
             char whiteout[PATH_MAX];
             if (strcmp(path, "/") == 0)
                 snprintf(whiteout, sizeof(whiteout), "%s/.wh.%s",
@@ -159,7 +155,7 @@ cleanup:
 // ---------------- OPEN ----------------
 static int unionfs_open(const char *path, struct fuse_file_info *fi)
 {
-    char upper[PATH_MAX], lower[PATH_MAX], resolved[PATH_MAX];  /* FIX 3 */
+    char upper[PATH_MAX], lower[PATH_MAX], resolved[PATH_MAX];  
 
     snprintf(upper, sizeof(upper), "%s%s", UNIONFS_DATA->upper_dir, path);
     snprintf(lower, sizeof(lower), "%s%s", UNIONFS_DATA->lower_dir, path);
@@ -196,7 +192,7 @@ static int unionfs_read(const char *path, char *buf, size_t size,
                         off_t offset, struct fuse_file_info *fi)
 {
     (void) fi;
-    char resolved[PATH_MAX];  /* FIX 3 */
+    char resolved[PATH_MAX];  
 
     if (resolve_path(path, resolved) != 0)
         return -ENOENT;
@@ -214,7 +210,7 @@ static int unionfs_read(const char *path, char *buf, size_t size,
 static int unionfs_write(const char *path, const char *buf, size_t size,
                          off_t offset, struct fuse_file_info *fi)
 {
-    char upper[PATH_MAX], lower[PATH_MAX], resolved[PATH_MAX];  /* FIX 3 */
+    char upper[PATH_MAX], lower[PATH_MAX], resolved[PATH_MAX];  
 
     snprintf(upper, sizeof(upper), "%s%s", UNIONFS_DATA->upper_dir, path);
     snprintf(lower, sizeof(lower), "%s%s", UNIONFS_DATA->lower_dir, path);
@@ -238,7 +234,7 @@ static int unionfs_write(const char *path, const char *buf, size_t size,
 static int unionfs_create(const char *path, mode_t mode,
                           struct fuse_file_info *fi)
 {
-    char upper[PATH_MAX];  /* FIX 3 */
+    char upper[PATH_MAX];  
 
     snprintf(upper, sizeof(upper), "%s%s", UNIONFS_DATA->upper_dir, path);
 
@@ -253,7 +249,7 @@ static int unionfs_create(const char *path, mode_t mode,
 // ---------------- UNLINK ----------------
 static int unionfs_unlink(const char *path)
 {
-    char upper[PATH_MAX], lower[PATH_MAX], whiteout[PATH_MAX];  /* FIX 3 */
+    char upper[PATH_MAX], lower[PATH_MAX], whiteout[PATH_MAX];  
 
     snprintf(upper, sizeof(upper), "%s%s", UNIONFS_DATA->upper_dir, path);
     snprintf(lower, sizeof(lower), "%s%s", UNIONFS_DATA->lower_dir, path);
@@ -279,7 +275,7 @@ static int unionfs_unlink(const char *path)
 // ---------------- MKDIR ----------------
 static int unionfs_mkdir(const char *path, mode_t mode)
 {
-    char upper[PATH_MAX];  /* FIX 3 */
+    char upper[PATH_MAX];  
     snprintf(upper, sizeof(upper), "%s%s", UNIONFS_DATA->upper_dir, path);
 
     if (mkdir(upper, mode) == -1)
@@ -289,11 +285,9 @@ static int unionfs_mkdir(const char *path, mode_t mode)
 }
 
 // ---------------- RMDIR ----------------
-/* FIX 5: mirror unlink behaviour — if directory only exists in lower,
-   create a whiteout marker so it is hidden from the merged view */
 static int unionfs_rmdir(const char *path)
 {
-    char upper[PATH_MAX], lower[PATH_MAX], whiteout[PATH_MAX];  /* FIX 3 */
+    char upper[PATH_MAX], lower[PATH_MAX], whiteout[PATH_MAX];  
 
     snprintf(upper, sizeof(upper), "%s%s", UNIONFS_DATA->upper_dir, path);
     snprintf(lower, sizeof(lower), "%s%s", UNIONFS_DATA->lower_dir, path);
@@ -317,18 +311,15 @@ static int unionfs_rmdir(const char *path)
 }
 
 // ---------------- TRUNCATE ----------------
-/* FIX 1 (truncate): required by text editors (vim, nano, etc.) that
-   truncate a file to 0 before rewriting it */
 static int unionfs_truncate(const char *path, off_t size,
                             struct fuse_file_info *fi)
 {
     (void) fi;
-    char upper[PATH_MAX], lower[PATH_MAX], resolved[PATH_MAX];  /* FIX 3 */
+    char upper[PATH_MAX], lower[PATH_MAX], resolved[PATH_MAX];  
 
     snprintf(upper, sizeof(upper), "%s%s", UNIONFS_DATA->upper_dir, path);
     snprintf(lower, sizeof(lower), "%s%s", UNIONFS_DATA->lower_dir, path);
 
-    /* CoW: if file only exists in lower, copy it up before truncating */
     if (access(upper, F_OK) != 0 && access(lower, F_OK) == 0) {
         if (copy_file(lower, upper) != 0)
             return -errno;
@@ -354,7 +345,7 @@ static struct fuse_operations unionfs_oper = {
     .unlink   = unionfs_unlink,
     .mkdir    = unionfs_mkdir,
     .rmdir    = unionfs_rmdir,
-    .truncate = unionfs_truncate,   /* FIX 1 */
+    .truncate = unionfs_truncate,   
 };
 
 // ---------------- MAIN ----------------
